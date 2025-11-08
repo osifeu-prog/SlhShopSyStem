@@ -1,0 +1,5 @@
+﻿.venv/
+__pycache__/
+*.pyc
+slh_shop_core.db
+.env

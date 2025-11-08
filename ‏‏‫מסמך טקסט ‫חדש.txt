@@ -1,0 +1,121 @@
+POST
+/orders
+Create Order
+
+Parameters
+Cancel
+Reset
+No parameters
+
+Request body
+
+application/json
+Edit Value
+Schema
+{
+  "buyer_user_id": "98e29e31-2ef5-4dbd-9d29-448a2bc4240b",
+  "shop_id": "3c901965-02e0-41c6-926b-99382e2a50ab",
+  "item_id": "3c0b9244-eef5-45cf-a130-350d8cb37a9f",
+  "payment_method": "slh"
+}
+
+Execute
+Clear
+Responses
+Curl
+
+curl -X 'POST' \
+  'http://127.0.0.1:8080/orders' \
+  -H 'accept: application/json' \
+  -H 'Content-Type: application/json' \
+  -d '{
+  "buyer_user_id": "98e29e31-2ef5-4dbd-9d29-448a2bc4240b",
+  "shop_id": "3c901965-02e0-41c6-926b-99382e2a50ab",
+  "item_id": "3c0b9244-eef5-45cf-a130-350d8cb37a9f",
+  "payment_method": "slh"
+}
+'
+Request URL
+http://127.0.0.1:8080/orders
+Server response
+Code	Details
+200	
+Response body
+Download
+{
+  "order": {
+    "id": "a5b208c2-e0b2-4b10-a560-b7f1acec8b2f",
+    "buyer_user_id": "98e29e31-2ef5-4dbd-9d29-448a2bc4240b",
+    "shop_id": "3c901965-02e0-41c6-926b-99382e2a50ab",
+    "item_id": "3c0b9244-eef5-45cf-a130-350d8cb37a9f",
+    "amount_slh": "39.0",
+    "amount_bnb": null,
+    "status": "pending",
+    "tx_hash": null,
+    "created_at": "2025-11-08T15:07:14Z",
+    "updated_at": "2025-11-08T15:07:14Z"
+  },
+  "payment_instructions": {
+    "to_address": "0xACb0A09414CEA1C879c67bB7A877E4e19480f022",
+    "amount": "39.0",
+    "symbol": "SLH",
+    "chain_id": 56
+  }
+}
+Response headers
+ content-length: 480 
+ content-type: application/json 
+ date: Sat,08 Nov 2025 15:07:13 GMT 
+ server: uvicorn 
+Responses
+Code	Description	Links
+200	
+Successful Response
+
+Media type
+
+application/json
+Controls Accept header.
+Example Value
+Schema
+{
+  "order": {
+    "id": "string",
+    "buyer_user_id": "string",
+    "shop_id": "string",
+    "item_id": "string",
+    "amount_slh": "string",
+    "amount_bnb": "string",
+    "status": "string",
+    "tx_hash": "string",
+    "created_at": "string",
+    "updated_at": "string"
+  },
+  "payment_instructions": {
+    "to_address": "string",
+    "amount": "string",
+    "symbol": "string",
+    "chain_id": 0
+  }
+}
+No links
+422	
+Validation Error
+
+Media type
+
+application/json
+Example Value
+Schema
+{
+  "detail": [
+    {
+      "loc": [
+        "string",
+        0
+      ],
+      "msg": "string",
+      "type": "string"
+    }
+  ]
+}
