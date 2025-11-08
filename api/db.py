@@ -1,13 +1,13 @@
 ﻿import os
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 
-# אם יש DATABASE_URL מהסביבה (בריילווי) – נשתמש בו.
-# אם לא – ניפול חזרה ל-SQLite לקומי (slh_shop_core.db).
+# אם אין DATABASE_URL – נ fallback ל-sqlite (למתחם מקומי)
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./slh_shop_core.db")
 
 connect_args = {}
-# SQLite צריך check_same_thread, אבל Postgres (ושאר DBs) לא.
+# רק ל-sqlite צריך check_same_thread
 if DATABASE_URL.startswith("sqlite"):
     connect_args = {"check_same_thread": False}
 
