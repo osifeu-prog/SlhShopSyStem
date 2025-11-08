@@ -2,8 +2,8 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 
-# אם יש DATABASE_URL מהסביבה (בריילווי)  נשתמש בו.
-# אם לא  ניפול חזרה ל-SQLite לקומי (slh_shop_core.db).
+# אם יש DATABASE_URL מהסביבה (בריילווי) – נשתמש בו.
+# אם לא – ניפול חזרה ל-SQLite לקומי (slh_shop_core.db).
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./slh_shop_core.db")
 
 connect_args = {}
