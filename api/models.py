@@ -19,7 +19,7 @@ class User(Base):
     __tablename__ = "users"
 
     id = Column(String, primary_key=True, default=gen_uuid)
-    telegram_id = Column(Integer, unique=True, index=True, nullable=False)
+    telegram_id = Column(BigInteger, unique=True, index=True, nullable=False)
     telegram_username = Column(String, nullable=True)
     display_name = Column(String, nullable=True)
     bnb_address = Column(String, nullable=True)
@@ -95,3 +95,4 @@ class Order(Base):
     buyer = relationship("User", back_populates="orders")
     shop = relationship("Shop", back_populates="orders")
     item = relationship("Item", back_populates="orders")
+
