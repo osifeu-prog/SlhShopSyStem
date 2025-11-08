@@ -1,13 +1,12 @@
 ﻿import os
-
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 
-# אם אין DATABASE_URL – נ fallback ל-sqlite (למתחם מקומי)
+# לוקחים מהסביבה (Railway נותן DATABASE_URL אוטומטית)
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./slh_shop_core.db")
 
 connect_args = {}
-# רק ל-sqlite צריך check_same_thread
+# רק ב-SQLite צריך check_same_thread
 if DATABASE_URL.startswith("sqlite"):
     connect_args = {"check_same_thread": False}
 
@@ -18,5 +17,4 @@ engine = create_engine(
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
 Base = declarative_base()
