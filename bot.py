@@ -51,10 +51,11 @@ async def call_api_demo_order(telegram_id: int) -> Dict[str, Any]:
     """
     יוצר הזמנת דמו דרך /shops/demo-order-bot.
 
-    שים לב: בצד ה-API המסלול הזה כרגע מוגדר כך ש-POST מחזיר 405,
-    ולכן כאן אנחנו משתמשים ב-GET עם query param telegram_id.
+    בצד ה-API המסלול הזה מחזיר 405 ל-POST, ולכן כאן אנחנו משתמשים ב-GET
+    עם query param telegram_id.
     """
     params = {"telegram_id": telegram_id}
+    logger.info("USING GET FOR DEMO ORDER")
     logger.info("GET %s/shops/demo-order-bot %s", API_BASE, params)
     async with httpx.AsyncClient(timeout=10.0) as client:
         resp = await client.get(f"{API_BASE}/shops/demo-order-bot", params=params)
