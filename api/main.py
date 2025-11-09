@@ -5,6 +5,8 @@ from datetime import datetime
 from typing import List, Optional, Dict, Any, Literal
 
 from fastapi import FastAPI, HTTPException, Depends
+from fastapi.staticfiles import StaticFiles
+from .payments_manual import router as payments_router
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -540,3 +542,5 @@ def get_order(order_id: str, db: Session = Depends(get_db)) -> Order:
         created_at=order.created_at.isoformat(),
         updated_at=order.updated_at.isoformat(),
     )
+
+
