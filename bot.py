@@ -1,223 +1,177 @@
 ﻿import os
 import logging
-from typing import Dict, Any, List, Optional
+from typing import Optional
 
 import httpx
 from telegram import Update
-from telegram.ext import Application, CommandHandler, ContextTypes
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    MessageHandler,
+    ContextTypes,
+    filters,
+)
 
-# =========================
-# Logging
-# =========================
-logger = logging.getLogger("slh_bot")
+# ===== Config =====
+API_BASE = os.getenv("API_BASE", "http://slhshopsystem:8080")
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+
 logging.basicConfig(
-    level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    level=logging.INFO,
 )
-
-# =========================
-# Config
-# =========================
-API_BASE = os.getenv("API_BASE", "http://slhshopsystem:8080").rstrip("/")
-
-BOT_TOKEN = (
-    os.getenv("BOT_TOKEN")
-    or os.getenv("TELEGRAM_BOT_TOKEN")
-    or os.getenv("TELEGRAM_TOKEN")
-)
-
-if not BOT_TOKEN:
-    raise RuntimeError(
-        "Bot token not found. Please set BOT_TOKEN or TELEGRAM_BOT_TOKEN or TELEGRAM_TOKEN."
-    )
-
-_http_client: Optional[httpx.AsyncClient] = None
+logger = logging.getLogger("slh_bot")
 
 
-def get_client() -> httpx.AsyncClient:
-    global _http_client
-    if _http_client is None:
-        _http_client = httpx.AsyncClient(timeout=10.0)
-    return _http_client
+# ===== Helper: sync user with API =====
+async def sync_user_with_api(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> Optional[dict]:
+    """Send user info to /users/telegram-sync and return JSON or None on error."""
+    if update.effective_user is None:
+        return None
 
-
-async def api_get(path: str, params: Dict[str, Any] | None = None) -> Any:
-    url = f"{API_BASE}{path}"
-    logger.info("GET %s %s", url, params or {})
-    client = get_client()
-    resp = await client.get(url, params=params)
-    resp.raise_for_status()
-    return resp.json()
-
-
-async def api_post(path: str, payload: Dict[str, Any]) -> Any:
-    url = f"{API_BASE}{path}"
-    logger.info("POST %s %s", url, payload)
-    client = get_client()
-    resp = await client.post(url, json=payload)
-    resp.raise_for_status()
-    return resp.json()
-
-# =========================
-# Helpers (API side)
-# =========================
-
-
-async def ensure_user_from_telegram(update: Update) -> Dict[str, Any]:
-    user = update.effective_user
-    display_name = user.full_name or user.username or str(user.id)
-
-    referral_code: Optional[str] = None
-    if update.message and update.message.text:
-        parts = update.message.text.split()
-        if len(parts) > 1 and parts[1].startswith("shop_"):
-            referral_code = parts[1][5:]
-
+    u = update.effective_user
     payload = {
-        "telegram_id": user.id,
-        "telegram_username": user.username,
-        "display_name": display_name,
-        "referral_code": referral_code,
+        "telegram_id": u.id,
+        "telegram_username": u.username,
+        "display_name": u.full_name,
+        "referral_code": None,
     }
 
-    data = await api_post("/users/telegram-sync", payload)
-    return data  # User מה-API
+    logger.info("POST %s/users/telegram-sync %s", API_BASE, payload)
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(f"{API_BASE}/users/telegram-sync", json=payload)
+            resp.raise_for_status()
+            return resp.json()
+    except Exception as e:
+        logger.exception("Error syncing user with API: %s", e)
+        if update.message:
+            await update.message.reply_text("❌ שגיאה בסנכרון משתמש עם ה-API.")
+        return None
 
 
-async def ensure_shop_and_default_item(api_user: Dict[str, Any]) -> tuple[Dict[str, Any], Dict[str, Any]]:
-    user_id = api_user["id"]
+# ===== Commands =====
 
-    shops: List[Dict[str, Any]] = await api_get(f"/users/{user_id}/shops")
-    if shops:
-        shop = shops[0]
-    else:
-        shop_payload = {
-            "owner_user_id": user_id,
-            "title": "Sela Shop של המשתמש",
-            "description": "חנות שנוצרה אוטומטית מהבוט",
-            "shop_type": "basic",
-        }
-        shop = await api_post("/shops", shop_payload)
-
-    items: List[Dict[str, Any]] = await api_get(f"/shops/{shop['id']}/items")
-    default_item: Optional[Dict[str, Any]] = None
-    for it in items:
-        if it.get("name", "").startswith("Love Card 39"):
-            default_item = it
-            break
-
-    if not default_item:
-        item_payload = {
-            "name": "Love Card 39 NIS",
-            "description": "כרטיס ניסוי שנוצר מהבוט",
-            "image_url": None,
-            "price_slh": "39.0",
-            "price_bnb": None,
-            "price_nis": 39.0,
-            "metadata": {"rarity": "common", "level": 1},
-        }
-        default_item = await api_post(f"/shops/{shop['id']}/items", item_payload)
-
-    return shop, default_item
-
-
-async def create_demo_order(api_user: Dict[str, Any]) -> Dict[str, Any]:
-    shop, item = await ensure_shop_and_default_item(api_user)
-
-    order_payload = {
-        "buyer_user_id": api_user["id"],
-        "shop_id": shop["id"],
-        "item_id": item["id"],
-        "payment_method": "slh",
-    }
-
-    order_with_payment = await api_post("/orders", order_payload)
-    return order_with_payment
-
-# =========================
-# Telegram Handlers
-# =========================
-
-
-async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    api_user = await ensure_user_from_telegram(update)
-    name = api_user.get("display_name") or update.effective_user.full_name
-
-    text = (
-        f"היי {name}! 👋\n"
-        f"חיברתי אותך ל-SLH Shop Core.\n\n"
-        f"פקודות זמינות:\n"
-        f"/myshop  לראות/ליצור את החנות שלך\n"
-        f"/demo_order  ליצור הזמנת ניסיון ולקבל הוראות תשלום\n"
-        f"(אפשר גם להשתמש בלינקים עם /start shop_<referral_code> כדי להיכנס לחנות של מישהו אחר.)"
-    )
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /start"""
+    await sync_user_with_api(update, context)
 
     if update.message:
-        await update.message.reply_text(text)
+        await update.message.reply_text(
+            "היי {}! 👋\n"
+            "חיברתי אותך ל-SLH Shop Core.\n\n"
+            "פקודות זמינות:\n"
+            "/myshop  לראות/ליצור את החנות שלך\n"
+            "/demo_order  ליצור הזמנת ניסיון ולקבל הוראות תשלום\n"
+            "(אפשר גם להשתמש בלינקים עם /start shop_<referral_code> כדי להיכנס לחנות של מישהו אחר.)".format(
+                update.effective_user.full_name if update.effective_user else "חבר"
+            )
+        )
 
 
-async def cmd_myshop(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    api_user = await ensure_user_from_telegram(update)
-    shop, item = await ensure_shop_and_default_item(api_user)
-
-    bot_username = context.bot.username
-    referral_code = shop.get("referral_code")
-    referral_link = f"https://t.me/{bot_username}?start=shop_{referral_code}" if referral_code else "—"
-
-    text = (
-        "📦 החנות שלך מוכנה!\n\n"
-        f"שם החנות: {shop.get('title')}\n"
-        f"קוד הפניה: {referral_code}\n\n"
-        f"פריט ברירת מחדל:\n"
-        f"• {item.get('name')}  {item.get('price_nis')} \n\n"
-        f"לינק שיתוף לחנות:\n"
-        f"{referral_link}"
-    )
+async def myshop(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """(בשלב הזה אפשר להוסיף בהמשך חיבור אמיתי ל-API של החנות)"""
+    await sync_user_with_api(update, context)
 
     if update.message:
-        await update.message.reply_text(text)
+        await update.message.reply_text(
+            "📦 בקרוב: מסך ניהול חנות מהמם מתוך הבוט.\n"
+            "בשלב זה, /myshop הוא Placeholder ואנחנו ממשיכים לבנות את המערכת."
+        )
 
 
-async def cmd_demo_order(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    api_user = await ensure_user_from_telegram(update)
-    order_with_payment = await create_demo_order(api_user)
+async def demo_order(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Create demo order via API and show payment instructions."""
+    user_data = await sync_user_with_api(update, context)
+    if user_data is None:
+        return
 
-    order = order_with_payment["order"]
-    payment = order_with_payment["payment_instructions"]
+    telegram_id = user_data.get("telegram_id") or (update.effective_user.id if update.effective_user else None)
+    if telegram_id is None:
+        if update.message:
+            await update.message.reply_text("❌ לא הצלחתי לזהות משתמש.")
+        return
 
-    shop, item = await ensure_shop_and_default_item(api_user)
+    payload = {"telegram_id": telegram_id}
+    logger.info("POST %s/demo-order %s", API_BASE, payload)
 
-    text = (
-        "✅ יצרתי עבורך הזמנת ניסיון.\n\n"
-        f"🎴 פריט: {item.get('name')}\n"
-        f"💰 סכום: {order.get('amount_slh')} {payment.get('symbol')}\n\n"
-        f"שלם לכתובת:\n"
-        f"{payment.get('to_address')}\n"
-        f"Chain ID: {payment.get('chain_id')}\n\n"
-        "(בשלב זה זו רק סימולציה  אין אימות on-chain עדיין.)\n\n"
-        f"מזהה הזמנה (לשימוש עתידי):\n"
-        f"`{order.get('id')}`"
-    )
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(f"{API_BASE}/demo-order", json=payload)
+            resp.raise_for_status()
+            data = resp.json()
+    except Exception as e:
+        logger.exception("Error calling /demo-order: %s", e)
+        if update.message:
+            await update.message.reply_text("❌ שגיאה ביצירת הזמנת ניסיון ב-API.")
+        return
+
+    item_name = data.get("item_name", "Love Card 39 NIS")
+    amount_slh = data.get("amount_slh", 39.0)
+    # כדי לא לסבך עכשיו עם order_id בטלגרם, נשאיר רק סימולציה כמו קודם
+    # אפשר בהמשך להוסיף הצגת order_id להעלאת קבלות מדויקת
 
     if update.message:
-        await update.message.reply_text(text, parse_mode="Markdown")
+        await update.message.reply_text(
+            "✅ יצרתי עבורך הזמנת ניסיון.\n\n"
+            f"🎴 פריט: {item_name}\n"
+            f"💰 סכום: {amount_slh} SLH\n\n"
+            "שלם לכתובת:\n"
+            "0xACb0A09414CEA1C879c67bB7A877E4e19480f022\n"
+            "Chain ID: 56\n\n"
+            "(בשלב זה זו רק סימולציה  אין אימות on-chain עדיין.)"
+        )
 
-# =========================
-# Application setup
-# =========================
+
+# ===== Photos: manual payment proof (קבלה מצולמת) =====
+
+async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    בשלב ראשון  רק מקבל את התמונה ומאשר שקיבלנו קבלה מצולמת.
+    אפשר בהמשך לחבר ל-/payments/upload-proof עם order_id.
+    """
+    if update.message is None:
+        return
+
+    user = update.effective_user
+    caption = update.message.caption or ""
+
+    logger.info(
+        "Received photo from user_id=%s caption=%r",
+        user.id if user else None,
+        caption,
+    )
+
+    # placeholder: רק אישור קבלה
+    await update.message.reply_text(
+        "📸 קיבלתי את צילום הקבלה.\n"
+        "בשלב הזה אני רק שומר שיש קבלה מצולמת.\n"
+        "בשלבים הבאים נחבר את זה להזמנה ספציפית במסד הנתונים."
+    )
 
 
-def build_application() -> Application:
-    app = Application.builder().token(BOT_TOKEN).build()
-    app.add_handler(CommandHandler("start", cmd_start))
-    app.add_handler(CommandHandler("myshop", cmd_myshop))
-    app.add_handler(CommandHandler("demo_order", cmd_demo_order))
-    return app
-
+# ===== Main =====
 
 def main() -> None:
+    if not BOT_TOKEN:
+        raise RuntimeError("BOT_TOKEN environment variable is not set")
+
     logger.info("Bot starting. API_BASE=%s", API_BASE)
-    application = build_application()
+
+    application = Application.builder().token(BOT_TOKEN).build()
+
+    # commands
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("myshop", myshop))
+    application.add_handler(CommandHandler("demo_order", demo_order))
+
+    # photos (קבלות מצולמות)
+    application.add_handler(
+        MessageHandler(filters.PHOTO & ~filters.COMMAND, handle_photo)
+    )
+
     logger.info("Starting polling...")
     application.run_polling()
 
