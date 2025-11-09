@@ -549,3 +549,4 @@ app.include_router(shops_demo_router)
 
 app.include_router(payments_router)
 
+
