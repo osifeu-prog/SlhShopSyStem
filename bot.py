@@ -4,16 +4,10 @@ import os
 import httpx
 from dotenv import load_dotenv
 from telegram import Update
-from telegram.ext import (
-    Application,
-    CommandHandler,
-    MessageHandler,
-    ContextTypes,
-    filters,
-)
+from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
 
 # -----------------------
-# בסיס לוגים
+# לוגים
 # -----------------------
 logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
@@ -81,7 +75,6 @@ async def myshop(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 # -----------------------
 # /demo_order  סימולציה של הזמנת ניסיון
-# (בינתיים בלי קריאה ל-API כדי להבטיח יציבות)
 # -----------------------
 async def demo_order(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     text = (
