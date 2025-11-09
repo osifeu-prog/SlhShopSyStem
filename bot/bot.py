@@ -5,7 +5,7 @@ from typing import Optional, Dict, Any, List
 
 import httpx
 from telegram import Update
-from telegram.ext import (
+from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
     Application,
     CommandHandler,
     ContextTypes,
@@ -259,8 +259,51 @@ def main() -> None:
     app.add_handler(CommandHandler("demo_order", demo_order))
 
     logger.info("Starting polling...")
+    app.add_handler(MessageHandler(filters.PHOTO & ~filters.COMMAND, handle_payment_proof))
+
     app.run_polling()
 
 
 if __name__ == "__main__":
     main()
+
+
+async def handle_payment_proof(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    כל תמונה שנשלחת לבוט תחשב כאישור תשלום להזמנה האחרונה של המשתמש.
+    """
+    message = update.message
+    user = update.effective_user
+
+    # אם אין הודעה או אין תמונה – יוצאים בשקט
+    if not message or not message.photo:
+        return
+
+    # לוקחים את הגרסה הכי גדולה של התמונה
+    photo = message.photo[-1]
+    file_id = photo.file_id
+    caption = message.caption or ""
+
+    payload = {
+        "telegram_id": user.id,
+        "file_id": file_id,
+        "caption": caption,
+    }
+
+    try:
+        resp = await api_post("/payments/telegram-photo", payload)
+        order_id = resp.get("order_id")
+
+        await message.reply_text(
+            (
+                "✅ קיבלתי את צילום אישור התשלום.\n"
+                f"נקשר להזמנה האחרונה שלך (order_id: {order_id}).\n"
+                "הסטטוס עודכן ל-waiting_verification."
+            )
+        )
+    except Exception as e:
+        await message.reply_text(
+            "❌ היתה שגיאה בשמירת אישור התשלום במערכת. אפשר לנסות שוב עוד כמה דקות."
+        )
+        print("Error sending payment proof:", repr(e))
+
