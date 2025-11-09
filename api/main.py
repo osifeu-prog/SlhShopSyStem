@@ -595,3 +595,7 @@ def get_order(order_id: str, db: Session = Depends(get_db)) -> Order:
 from .demo_order_bot_manual import router as demo_order_bot_router
 app.include_router(demo_order_bot_router)
 
+
+from .demo_order_mock import router as demo_order_router
+app.include_router(demo_order_router)
+
