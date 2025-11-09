@@ -546,3 +546,6 @@ def get_order(order_id: str, db: Session = Depends(get_db)) -> Order:
 
 from .shops_demo import router as shops_demo_router
 app.include_router(shops_demo_router)
+
+app.include_router(payments_router)
+
