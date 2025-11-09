@@ -18,3 +18,15 @@ engine = create_engine(
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
+from typing import Generator
+
+def get_db() -> Generator:
+    """
+    Dependency שמחזיר session למסד הנתונים.
+    משתמש ב-SessionLocal שמוגדר כבר בקובץ db.py.
+    """
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
