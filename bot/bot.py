@@ -1,11 +1,15 @@
 ﻿import logging
 import os
+import io
+
 import httpx
 from telegram import Update
 from telegram.ext import (
     Application,
     CommandHandler,
     ContextTypes,
+    MessageHandler,
+    filters,
 )
 
 API_BASE = os.getenv("API_BASE", "http://slhshopsystem:8080")
@@ -36,14 +40,28 @@ async def call_api_telegram_sync(
 
 async def call_api_demo_order(telegram_id: int):
     """
-    יוצר הזמנת דמו ב-API.
-    אנחנו משתמשים במסלול חדש: POST /shops/demo-order-bot
-    ושולחים לו JSON עם telegram_id.
+    יוצר הזמנת דמו ב-API (צד שרת).
+    משתמשים במסלול: POST /shops/demo-order-bot
     """
     payload = {"telegram_id": telegram_id}
     logger.info("POST %s/shops/demo-order-bot %s", API_BASE, payload)
     async with httpx.AsyncClient(timeout=10.0) as client:
         resp = await client.post(f"{API_BASE}/shops/demo-order-bot", json=payload)
+        resp.raise_for_status()
+        return resp.json()
+
+
+async def call_api_upload_proof(order_id: str, file_bytes: bytes, content_type: str = "image/jpeg"):
+    """
+    שולח צילום אישור תשלום אל /payments/upload-proof כ-multipart/form-data.
+    """
+    data = {"order_id": order_id}
+    files = {
+        "file": ("payment_proof.jpg", file_bytes, content_type),
+    }
+    logger.info("POST %s/payments/upload-proof (order_id=%s)", API_BASE, order_id)
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        resp = await client.post(f"{API_BASE}/payments/upload-proof", data=data, files=files)
         resp.raise_for_status()
         return resp.json()
 
@@ -102,10 +120,14 @@ async def demo_order_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await update.message.reply_text("❌ שגיאה ביצירת הזמנת ניסיון.")
         return
 
+    order_id = data.get("order_id")
     item_name = data.get("item_name", "פריט ניסיון")
     amount_slh = data.get("amount_slh", 0)
     payment_address = data.get("payment_address", "N/A")
     chain_id = data.get("chain_id", 56)
+
+    # נשמור את מזהה ההזמנה האחרונה של המשתמש
+    context.user_data["last_order_id"] = order_id
 
     msg = (
         "✅ יצרתי עבורך הזמנת ניסיון.\n\n"
@@ -114,9 +136,64 @@ async def demo_order_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
         "שלם לכתובת:\n"
         f"{payment_address}\n"
         f"Chain ID: {chain_id}\n\n"
-        "(בשלב זה זו רק סימולציה  אין אימות on-chain עדיין.)"
+        f"מספר הזמנה: {order_id}\n\n"
+        "לאחר ששילמת, שלח לי כאן צילום של אישור התשלום,\n"
+        "ואקשר אותו להזמנה הזאת (לשימוש פנימי ואימות ידני)."
     )
     await update.message.reply_text(msg)
+
+
+async def photo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    מטפל בתמונת אישור תשלום:
+    - לוקח את ההזמנה האחרונה (last_order_id) של המשתמש
+    - מוריד את התמונה מהטלגרם
+    - שולח ל-API /payments/upload-proof
+    """
+    user = update.effective_user
+    message = update.message
+
+    if not message or not message.photo:
+        return
+
+    order_id = context.user_data.get("last_order_id")
+    if not order_id:
+        await message.reply_text(
+            "לא מצאתי הזמנת ניסיון פעילה עבורך.\n"
+            "שלח קודם /demo_order, ואז שלח צילום של אישור התשלום."
+        )
+        return
+
+    try:
+        # ניקח את התמונה באיכות הגבוהה ביותר
+        photo = message.photo[-1]
+        file = await photo.get_file()
+
+        buffer = io.BytesIO()
+        buffer = await file.download_to_memory(out=buffer)
+        buffer.seek(0)
+        file_bytes = buffer.read()
+
+        api_result = await call_api_upload_proof(order_id=order_id, file_bytes=file_bytes)
+
+    except httpx.HTTPStatusError as e:
+        logger.error("Error uploading payment proof to API: %s", e)
+        await message.reply_text("❌ שגיאה בשליחת צילום האישור לשרת.")
+        return
+    except Exception:
+        logger.exception("Unexpected error in photo_handler")
+        await message.reply_text("❌ שגיאה בלתי צפויה בטיפול בתמונה.")
+        return
+
+    if not api_result.get("ok"):
+        await message.reply_text("❌ השרת לא אישר את שמירת צילום האישור.")
+        return
+
+    await message.reply_text(
+        "📸 קיבלתי את צילום האישור!\n"
+        f"הזמנה {order_id} עודכנה למצב waiting_verification.\n"
+        "אימות התשלום יתבצע ידנית על בסיס הרשומה במערכת."
+    )
 
 
 def main():
@@ -132,6 +209,9 @@ def main():
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("myshop", myshop_command))
     application.add_handler(CommandHandler("demo_order", demo_order_command))
+
+    # כל תמונה  יטופל כצילום אישור עבור ההזמנה האחרונה
+    application.add_handler(MessageHandler(filters.PHOTO, photo_handler))
 
     application.run_polling()
 

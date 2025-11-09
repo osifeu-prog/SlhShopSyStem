@@ -1,9 +1,9 @@
 ﻿import os
+import uuid
 from datetime import datetime
-from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Depends
-from pydantic import BaseModel
+from fastapi import APIRouter, UploadFile, Form, HTTPException, Depends
+from starlette.responses import JSONResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
@@ -15,75 +15,80 @@ UPLOAD_DIR = "uploaded_proofs"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 
-class TelegramPhotoIn(BaseModel):
-    telegram_id: int
-    file_id: str
-    caption: Optional[str] = None
-
-
-@router.post("/telegram-photo")
-async def telegram_photo(payload: TelegramPhotoIn, db: Session = Depends(get_db)):
+@router.post("/upload-proof")
+async def upload_payment_proof(
+    order_id: str = Form(...),
+    file: UploadFile | None = None,
+    db: Session = Depends(get_db),
+):
     """
-    מקבל צילום מסך מתשלום בטלגרם, משייך להזמנה האחרונה של המשתמש,
-    ושומר את ה-file_id + caption בעמודת payment_proof_url.
+    מקבל צילום אישור תשלום מהבוט, שומר אותו בשרת,
+    ומעדכן את ההזמנה בטבלת orders:
+    - payment_proof_url  נתיב הקובץ
+    - status  waiting_verification
     """
+    if file is None:
+        raise HTTPException(status_code=400, detail="No file uploaded")
 
-    # 1) למצוא משתמש לפי telegram_id
-    user_row = db.execute(
-        text('SELECT id FROM public."users" WHERE telegram_id = :tg_id'),
-        {"tg_id": payload.telegram_id},
-    ).fetchone()
+    ext = os.path.splitext(file.filename or "")[1]
+    if not ext:
+        ext = ".jpg"
 
-    if not user_row:
-        raise HTTPException(
-            status_code=404,
-            detail="User not found for this telegram_id",
-        )
+    filename = f"{uuid.uuid4()}{ext}"
+    filepath = os.path.join(UPLOAD_DIR, filename)
 
-    user_id = user_row[0]
+    contents = await file.read()
+    with open(filepath, "wb") as f:
+        f.write(contents)
 
-    # 2) למצוא את ההזמנה האחרונה של המשתמש
-    order_row = db.execute(
-        text(
-            'SELECT id FROM public."orders" '
-            'WHERE buyer_user_id = :user_id '
-            'ORDER BY created_at DESC '
-            'LIMIT 1'
-        ),
-        {"user_id": user_id},
-    ).fetchone()
+    file_url = f"/{UPLOAD_DIR}/{filename}"
 
-    if not order_row:
-        raise HTTPException(
-            status_code=404,
-            detail="No orders found for this user",
-        )
-
-    order_id = order_row[0]
-
-    # 3) לבנות ערך proof  פשוט טקסט עם file_id + caption
-    proof_value = f"tg_file_id={payload.file_id};caption={payload.caption or ''}"
-
-    # 4) לעדכן את ההזמנה
-    db.execute(
+    now = datetime.utcnow()
+    result = db.execute(
         text(
             'UPDATE public."orders" '
-            'SET payment_proof_url = :proof, '
-            "    status = 'waiting_verification', "
-            '    updated_at = :updated_at '
+            'SET payment_proof_url = :file_url, status = :status, updated_at = :updated_at '
             'WHERE id = :order_id'
         ),
         {
-            "proof": proof_value,
-            "updated_at": datetime.utcnow(),
+            "file_url": file_url,
+            "status": "waiting_verification",
+            "updated_at": now,
             "order_id": order_id,
         },
     )
 
+    if result.rowcount == 0:
+        raise HTTPException(status_code=404, detail="Order not found")
+
     db.commit()
 
-    return {
-        "ok": True,
-        "order_id": str(order_id),
-        "stored_proof": proof_value,
-    }
+    return JSONResponse(
+        {"ok": True, "order_id": order_id, "proof_url": file_url}
+    )
+
+
+@router.post("/approve/{order_id}")
+async def approve_order(order_id: str, db: Session = Depends(get_db)):
+    """
+    מסמן הזמנה כ-paid (אפשר לקרוא ידנית מ-Postman או מה-API).
+    """
+    now = datetime.utcnow()
+    result = db.execute(
+        text(
+            'UPDATE public."orders" '
+            'SET status = :status, updated_at = :updated_at '
+            'WHERE id = :order_id'
+        ),
+        {
+            "status": "paid",
+            "updated_at": now,
+            "order_id": order_id,
+        },
+    )
+
+    if result.rowcount == 0:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    db.commit()
+    return {"ok": True, "message": "Order approved"}
