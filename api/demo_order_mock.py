@@ -1,10 +1,10 @@
 ﻿from fastapi import APIRouter
-from typing import Dict
+from typing import Dict, Any
 
-router = APIRouter()
+router = APIRouter(prefix="/shops", tags=["demo-order-bot"])
 
-@router.get("/shops/demo-order-bot")
-async def create_demo_order_mock(telegram_id: int) -> Dict:
+@router.get("/demo-order-bot")
+async def create_demo_order_mock(telegram_id: int) -> Dict[str, Any]:
     """
     Mock endpoint for demo order used by the Telegram bot.
     Always returns a fake order for testing.
@@ -17,5 +17,5 @@ async def create_demo_order_mock(telegram_id: int) -> Dict:
         "amount": 100.0,
         "currency": "USDT",
         "payment_address": "demo_wallet_address_123",
-        "note": "Mock response from /shops/demo-order-bot",
+        "note": "Mock response from /shops/demo-order-bot (overrides real route)",
     }
