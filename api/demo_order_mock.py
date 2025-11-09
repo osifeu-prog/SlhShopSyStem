@@ -8,10 +8,10 @@ async def demo_order_bot(telegram_id: int | None = None):
     """
     Demo endpoint for the Telegram bot.
 
-    NOTE:
-    - כרגע לא נוגעים בכלל ב-DB.
-    - הכל סימולציה: יוצר order_id רנדומלי ומחזיר פרטי תשלום קבועים.
-    - מספיק כדי שהבוט יציג הוראות תשלום ויזכור last_order_id.
+    כרגע:
+    - לא נוגעים בבסיס הנתונים.
+    - יוצרים order_id רנדומלי בלבד.
+    - מחזירים פרטי Love Card דמיוניים קבועים.
     """
 
     order_id = str(uuid.uuid4())
