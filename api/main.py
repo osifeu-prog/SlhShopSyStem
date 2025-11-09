@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import json
 from datetime import datetime
@@ -20,7 +20,7 @@ from .models import (
 )
 from .payments_manual import router as payments_router
 
-# ליצור טבלאות אם לא קיימות
+# ×œ×™×¦×•×¨ ×ک×‘×œ×گ×•×ھ ×گ×‌ ×œ×گ ×§×™×™×‍×•×ھ
 Base.metadata.create_all(bind=engine)
 
 
@@ -28,7 +28,7 @@ def now_iso() -> str:
     return datetime.utcnow().isoformat(timespec="seconds") + "Z"
 
 
-# תלות ל-SQLAlchemy Session לכל בקשה
+# ×ھ×œ×•×ھ ×œ-SQLAlchemy Session ×œ×›×œ ×‘×§×©×”
 def get_db():
     db = SessionLocal()
     try:
@@ -591,3 +591,7 @@ def get_order(order_id: str, db: Session = Depends(get_db)) -> Order:
         created_at=order.created_at.isoformat(),
         updated_at=order.updated_at.isoformat(),
     )
+
+from .demo_order_bot_manual import router as demo_order_bot_router
+app.include_router(demo_order_bot_router)
+

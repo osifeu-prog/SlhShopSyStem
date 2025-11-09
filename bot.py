@@ -49,10 +49,7 @@ async def call_api_telegram_sync(
 
 async def call_api_demo_order(telegram_id: int) -> Dict[str, Any]:
     """
-    יוצר הזמנת דמו דרך /shops/demo-order-bot.
-
-    בצד ה-API המסלול הזה מחזיר 405 ל-POST, ולכן כאן אנחנו משתמשים ב-GET
-    עם query param telegram_id.
+    יוצר הזמנת דמו דרך /shops/demo-order-bot (GET עם telegram_id).
     """
     params = {"telegram_id": telegram_id}
     logger.info("USING GET FOR DEMO ORDER")
@@ -139,20 +136,21 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     /help  מדריך שימוש קצר.
+    (ללא Markdown כדי לא להיתקע על תווים מיוחדים)
     """
     text = (
-        "📖 *מדריך שימוש ב-SLH Shop Bot*\n\n"
-        "1️⃣ /demo_order  יצירת הזמנת ניסיון.\n"
+        "📖 מדריך שימוש ב-SLH Shop Bot\n\n"
+        "1) /demo_order  יצירת הזמנת ניסיון.\n"
         "   אחרי ההזמנה תקבל מספר הזמנה (order_id).\n\n"
-        "2️⃣ בצע את התשלום לכתובת שתופיע.\n\n"
-        "3️⃣ שלח כאן צילום מסך/תמונה של אישור התשלום.\n"
-        "   • אם תשלח *בלי כיתוב*  התמונה תיקשר *להזמנה האחרונה* שלך.\n"
+        "2) בצע את התשלום לכתובת שתופיע.\n\n"
+        "3) שלח כאן צילום מסך/תמונה של אישור התשלום.\n"
+        "   • אם תשלח בלי כיתוב  התמונה תיקשר להזמנה האחרונה שלך.\n"
         "   • אם תוסיף בכיתוב את מספר ההזמנה (order_id)  אקשר להזמנה הזאת.\n\n"
-        "4️⃣ /myshop  כרגע רק הודעת placeholder, ניהול חנות מלא יגיע בהמשך.\n\n"
-        "אם משהו לא עובד, אפשר תמיד לשלוח שוב /start.\n"
+        "4) /myshop  כרגע הודעת מצב בלבד, ניהול חנות מלא יגיע בהמשך.\n\n"
+        "אם משהו לא עובד, אפשר תמיד לשלוח שוב /start."
     )
     if update.message:
-        await update.message.reply_text(text, parse_mode="Markdown")
+        await update.message.reply_text(text)
 
 
 async def myshop_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -208,16 +206,16 @@ async def demo_order_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
         f"🎴 פריט: {item_name}\n"
         f"💰 סכום: {amount_slh} SLH\n\n"
         "שלם לכתובת:\n"
-        f"`{payment_address}`\n"
+        f"{payment_address}\n"
         f"Chain ID: {chain_id}\n\n"
-        f"מספר הזמנה: `{order_id}`\n\n"
+        f"מספר הזמנה: {order_id}\n\n"
         "לאחר ששילמת, שלח לי כאן צילום של אישור התשלום,\n"
         "ואקשר אותו להזמנה הזאת (לשימוש פנימי ואימות ידני).\n\n"
         "אפשר גם לשלוח את הצילום עם כיתוב שמכיל את מספר ההזמנה."
     )
 
     if update.message:
-        await update.message.reply_text(msg, parse_mode="Markdown")
+        await update.message.reply_text(msg)
 
 
 async def photo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -246,7 +244,7 @@ async def photo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "❌ לא הצלחתי לזהות איזו הזמנה לעדכן.\n\n"
             "אפשרויות:\n"
             "1. צור הזמנה חדשה עם /demo_order ואז שלח שוב את התמונה.\n"
-            "2. שלח את התמונה *עם כיתוב* שמכיל את מספר ההזמנה (order_id)."
+            "2. שלח את התמונה עם כיתוב שמכיל את מספר ההזמנה (order_id)."
         )
         return
 
@@ -299,7 +297,6 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
                 "אם זה חוזר על עצמו, פנה לתמיכה."
             )
     except Exception:
-        # לא רוצים שהטיפול בשגיאה יפיל את הבוט
         pass
 
 
