@@ -85,7 +85,8 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     except Exception:
         logger.exception("Error syncing user with API")
-        await update.message.reply_text("❌ שגיאה בסנכרון משתמש עם ה-API.")
+        if update.message:
+            await update.message.reply_text("❌ שגיאה בסנכרון משתמש עם ה-API.")
         return
 
     text = (
@@ -96,11 +97,13 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/demo_order  ליצור הזמנת ניסיון ולקבל הוראות תשלום\n"
         "(אפשר גם להשתמש בלינקים עם /start shop_<referral_code> כדי להיכנס לחנות של מישהו אחר.)"
     )
-    await update.message.reply_text(text)
+    if update.message:
+        await update.message.reply_text(text)
 
 
 async def myshop_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🔧 /myshop עדיין בפיתוח בגרסה הזו של הבוט.")
+    if update.message:
+        await update.message.reply_text("🔧 /myshop עדיין בפיתוח בגרסה הזו של הבוט.")
 
 
 async def demo_order_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -109,15 +112,18 @@ async def demo_order_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
         data = await call_api_demo_order(user.id)
     except httpx.HTTPStatusError as e:
         logger.error("Error creating demo order: %s", e)
-        await update.message.reply_text("❌ שגיאה ביצירת הזמנת ניסיון.")
+        if update.message:
+            await update.message.reply_text("❌ שגיאה ביצירת הזמנת ניסיון.")
         return
     except Exception:
         logger.exception("Error creating demo order (unexpected)")
-        await update.message.reply_text("❌ שגיאה ביצירת הזמנת ניסיון.")
+        if update.message:
+            await update.message.reply_text("❌ שגיאה ביצירת הזמנת ניסיון.")
         return
 
     if not data.get("ok"):
-        await update.message.reply_text("❌ שגיאה ביצירת הזמנת ניסיון.")
+        if update.message:
+            await update.message.reply_text("❌ שגיאה ביצירת הזמנת ניסיון.")
         return
 
     order_id = data.get("order_id")
@@ -140,7 +146,8 @@ async def demo_order_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
         "לאחר ששילמת, שלח לי כאן צילום של אישור התשלום,\n"
         "ואקשר אותו להזמנה הזאת (לשימוש פנימי ואימות ידני)."
     )
-    await update.message.reply_text(msg)
+    if update.message:
+        await update.message.reply_text(msg)
 
 
 async def photo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -150,8 +157,8 @@ async def photo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     - מוריד את התמונה מהטלגרם
     - שולח ל-API /payments/upload-proof
     """
-    user = update.effective_user
     message = update.message
+    user = update.effective_user
 
     if not message or not message.photo:
         return
@@ -169,12 +176,14 @@ async def photo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         photo = message.photo[-1]
         file = await photo.get_file()
 
-        buffer = io.BytesIO()
-        buffer = await file.download_to_memory(out=buffer)
-        buffer.seek(0)
-        file_bytes = buffer.read()
+        # כאן הייתה הבעיה  עכשיו נשתמש בפונקציה פשוטה שמחזירה bytearray
+        file_bytearray = await file.download_as_bytearray()
+        file_bytes = bytes(file_bytearray)
 
-        api_result = await call_api_upload_proof(order_id=order_id, file_bytes=file_bytes)
+        api_result = await call_api_upload_proof(
+            order_id=order_id,
+            file_bytes=file_bytes,
+        )
 
     except httpx.HTTPStatusError as e:
         logger.error("Error uploading payment proof to API: %s", e)
@@ -210,7 +219,7 @@ def main():
     application.add_handler(CommandHandler("myshop", myshop_command))
     application.add_handler(CommandHandler("demo_order", demo_order_command))
 
-    # כל תמונה  יטופל כצילום אישור עבור ההזמנה האחרונה
+    # כל תמונה  תטופל כצילום אישור עבור ההזמנה האחרונה
     application.add_handler(MessageHandler(filters.PHOTO, photo_handler))
 
     application.run_polling()
