@@ -1,18 +1,24 @@
-﻿import os
 from __future__ import annotations
 
 import json
 from datetime import datetime
 from typing import List, Optional, Dict, Any, Literal
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.staticfiles import StaticFiles
-from .payments_manual import router as payments_router
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from .db import SessionLocal, engine
-from .models import Base, User as UserModel, Shop as ShopModel, Item as ItemModel, Order as OrderModel
+from .models import (
+    Base,
+    User as UserModel,
+    Shop as ShopModel,
+    Item as ItemModel,
+    Order as OrderModel,
+)
+from .payments_manual import router as payments_router
 
 # ליצור טבלאות אם לא קיימות
 Base.metadata.create_all(bind=engine)
@@ -136,7 +142,6 @@ BSC_CHAIN_ID = 56
 SLH_TOKEN_ADDRESS = "0xACb0A09414CEA1C879c67bB7A877E4e19480f022"
 SLH_SYMBOL = "SLH"
 
-
 # =============================
 # FastAPI App
 # =============================
@@ -146,6 +151,20 @@ app = FastAPI(
     version="0.1.0",
     description="Core API for SLH Shop-based ecosystem (with SQLite DB).",
 )
+
+# ---- Static files for uploaded_proofs ----
+BASE_DIR = Path(__file__).resolve().parent
+UPLOAD_ROOT = BASE_DIR.parent / "uploaded_proofs"
+
+if UPLOAD_ROOT.exists():
+    app.mount(
+        "/uploaded_proofs",
+        StaticFiles(directory=str(UPLOAD_ROOT)),
+        name="uploaded_proofs",
+    )
+
+# ---- Include payments router (/payments/upload-proof) ----
+app.include_router(payments_router)
 
 
 # =============================
@@ -176,8 +195,14 @@ def meta() -> Dict[str, Any]:
 
 
 @app.post("/users/telegram-sync", response_model=User)
-def users_telegram_sync(payload: UserCreateFromTelegram, db: Session = Depends(get_db)) -> User:
-    user = db.query(UserModel).filter(UserModel.telegram_id == payload.telegram_id).first()
+def users_telegram_sync(
+    payload: UserCreateFromTelegram,
+    db: Session = Depends(get_db),
+) -> User:
+    user = db.query(UserModel).filter(
+        UserModel.telegram_id == payload.telegram_id
+    ).first()
+
     if user:
         user.telegram_username = payload.telegram_username or user.telegram_username
         user.display_name = payload.display_name or user.display_name
@@ -216,6 +241,7 @@ def get_user(user_id: str, db: Session = Depends(get_db)) -> User:
     user = db.query(UserModel).filter(UserModel.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+
     return User(
         id=user.id,
         telegram_id=user.telegram_id,
@@ -280,7 +306,6 @@ def create_shop(payload: ShopCreate, db: Session = Depends(get_db)) -> Shop:
     if not owner:
         raise HTTPException(status_code=400, detail="Owner user not found")
 
-    # slug + referral_code
     base = payload.title.replace(" ", "-")[:12] or "shop"
     suffix = datetime.utcnow().strftime("%H%M%S")
     slug = f"{base}-{suffix}"
@@ -318,6 +343,7 @@ def get_shop(shop_id: str, db: Session = Depends(get_db)) -> Shop:
     shop = db.query(ShopModel).filter(ShopModel.id == shop_id).first()
     if not shop:
         raise HTTPException(status_code=404, detail="Shop not found")
+
     return Shop(
         id=shop.id,
         owner_user_id=shop.owner_user_id,
@@ -333,7 +359,10 @@ def get_shop(shop_id: str, db: Session = Depends(get_db)) -> Shop:
 
 
 @app.get("/shops/by-owner/{owner_user_id}", response_model=List[Shop])
-def get_shops_by_owner(owner_user_id: str, db: Session = Depends(get_db)) -> List[Shop]:
+def get_shops_by_owner(
+    owner_user_id: str,
+    db: Session = Depends(get_db),
+) -> List[Shop]:
     shops = db.query(ShopModel).filter(ShopModel.owner_user_id == owner_user_id).all()
     return [
         Shop(
@@ -353,10 +382,18 @@ def get_shops_by_owner(owner_user_id: str, db: Session = Depends(get_db)) -> Lis
 
 
 @app.get("/shops/by-referral/{referral_code}", response_model=Shop)
-def get_shop_by_referral(referral_code: str, db: Session = Depends(get_db)) -> Shop:
-    shop = db.query(ShopModel).filter(ShopModel.referral_code == referral_code).first()
+def get_shop_by_referral(
+    referral_code: str,
+    db: Session = Depends(get_db),
+) -> Shop:
+    shop = (
+        db.query(ShopModel)
+        .filter(ShopModel.referral_code == referral_code)
+        .first()
+    )
     if not shop:
         raise HTTPException(status_code=404, detail="Shop not found for referral code")
+
     return Shop(
         id=shop.id,
         owner_user_id=shop.owner_user_id,
@@ -377,7 +414,11 @@ def get_shop_by_referral(referral_code: str, db: Session = Depends(get_db)) -> S
 
 
 @app.post("/shops/{shop_id}/items", response_model=Item)
-def create_item(shop_id: str, payload: ItemCreate, db: Session = Depends(get_db)) -> Item:
+def create_item(
+    shop_id: str,
+    payload: ItemCreate,
+    db: Session = Depends(get_db),
+) -> Item:
     shop = db.query(ShopModel).filter(ShopModel.id == shop_id).first()
     if not shop:
         raise HTTPException(status_code=404, detail="Shop not found")
@@ -420,6 +461,7 @@ def list_shop_items(shop_id: str, db: Session = Depends(get_db)) -> List[Item]:
         raise HTTPException(status_code=404, detail="Shop not found")
 
     items = db.query(ItemModel).filter(ItemModel.shop_id == shop_id).all()
+
     return [
         Item(
             id=i.id,
@@ -443,6 +485,7 @@ def get_item(item_id: str, db: Session = Depends(get_db)) -> Item:
     item = db.query(ItemModel).filter(ItemModel.id == item_id).first()
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
+
     return Item(
         id=item.id,
         shop_id=item.shop_id,
@@ -468,9 +511,11 @@ def create_order(payload: OrderCreate, db: Session = Depends(get_db)) -> OrderWi
     buyer = db.query(UserModel).filter(UserModel.id == payload.buyer_user_id).first()
     if not buyer:
         raise HTTPException(status_code=400, detail="Buyer user not found")
+
     shop = db.query(ShopModel).filter(ShopModel.id == payload.shop_id).first()
     if not shop:
         raise HTTPException(status_code=400, detail="Shop not found")
+
     item = db.query(ItemModel).filter(ItemModel.id == payload.item_id).first()
     if not item:
         raise HTTPException(status_code=400, detail="Item not found")
@@ -503,7 +548,9 @@ def create_order(payload: OrderCreate, db: Session = Depends(get_db)) -> OrderWi
     db.refresh(order)
 
     payment = PaymentInstructions(
-        to_address=SLH_TOKEN_ADDRESS if payload.payment_method == "slh" else "0xYourBNBMerchantAddress",
+        to_address=SLH_TOKEN_ADDRESS
+        if payload.payment_method == "slh"
+        else "0xYourBNBMerchantAddress",
         amount=amount_slh or amount_bnb or "0",
         symbol=symbol,
         chain_id=BSC_CHAIN_ID,
@@ -531,6 +578,7 @@ def get_order(order_id: str, db: Session = Depends(get_db)) -> Order:
     order = db.query(OrderModel).filter(OrderModel.id == order_id).first()
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
+
     return Order(
         id=order.id,
         buyer_user_id=order.buyer_user_id,
@@ -543,12 +591,3 @@ def get_order(order_id: str, db: Session = Depends(get_db)) -> Order:
         created_at=order.created_at.isoformat(),
         updated_at=order.updated_at.isoformat(),
     )
-
-
-from .shops_demo import router as shops_demo_router
-app.include_router(shops_demo_router)
-
-app.include_router(payments_router)
-
-
-
