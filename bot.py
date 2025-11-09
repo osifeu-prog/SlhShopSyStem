@@ -4,11 +4,7 @@ from typing import Dict, Any, List, Optional
 
 import httpx
 from telegram import Update
-from telegram.ext import (
-    Application,
-    CommandHandler,
-    ContextTypes,
-)
+from telegram.ext import Application, CommandHandler, ContextTypes
 
 # =========================
 # Logging
@@ -35,7 +31,6 @@ if not BOT_TOKEN:
         "Bot token not found. Please set BOT_TOKEN or TELEGRAM_BOT_TOKEN or TELEGRAM_TOKEN."
     )
 
-# HTTP client
 _http_client: Optional[httpx.AsyncClient] = None
 
 
@@ -72,7 +67,6 @@ async def ensure_user_from_telegram(update: Update) -> Dict[str, Any]:
     user = update.effective_user
     display_name = user.full_name or user.username or str(user.id)
 
-    # תמיכה ב-referral דרך /start shop_<referral>
     referral_code: Optional[str] = None
     if update.message and update.message.text:
         parts = update.message.text.split()
@@ -87,17 +81,12 @@ async def ensure_user_from_telegram(update: Update) -> Dict[str, Any]:
     }
 
     data = await api_post("/users/telegram-sync", payload)
-    return data  # זה אובייקט User מה-API
+    return data  # User מה-API
 
 
 async def ensure_shop_and_default_item(api_user: Dict[str, Any]) -> tuple[Dict[str, Any], Dict[str, Any]]:
-    """
-    מחפש חנות קיימת למשתמש, ואם אין  יוצר אחת.
-    אותו דבר עבור פריט ברירת מחדל (Love Card 39 NIS).
-    """
     user_id = api_user["id"]
 
-    # חנויות של המשתמש
     shops: List[Dict[str, Any]] = await api_get(f"/users/{user_id}/shops")
     if shops:
         shop = shops[0]
@@ -110,7 +99,6 @@ async def ensure_shop_and_default_item(api_user: Dict[str, Any]) -> tuple[Dict[s
         }
         shop = await api_post("/shops", shop_payload)
 
-    # פריטים בחנות
     items: List[Dict[str, Any]] = await api_get(f"/shops/{shop['id']}/items")
     default_item: Optional[Dict[str, Any]] = None
     for it in items:
@@ -197,7 +185,6 @@ async def cmd_demo_order(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     order = order_with_payment["order"]
     payment = order_with_payment["payment_instructions"]
 
-    # כדי להציג גם את שם הפריט
     shop, item = await ensure_shop_and_default_item(api_user)
 
     text = (
@@ -222,11 +209,9 @@ async def cmd_demo_order(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 def build_application() -> Application:
     app = Application.builder().token(BOT_TOKEN).build()
-
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("myshop", cmd_myshop))
     app.add_handler(CommandHandler("demo_order", cmd_demo_order))
-
     return app
 
 
