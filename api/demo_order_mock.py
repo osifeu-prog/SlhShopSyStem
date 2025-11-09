@@ -1,7 +1,8 @@
-﻿from fastapi import APIRouter, Query
+﻿from fastapi import APIRouter
 from pydantic import BaseModel
+from typing import Optional
 
-router = APIRouter(prefix="/shops", tags=["demo-order-bot"])
+router = APIRouter()
 
 
 class DemoOrderResponse(BaseModel):
@@ -16,11 +17,11 @@ class DemoOrderResponse(BaseModel):
 MOCK_ADDRESS = "0xACb0A09414CEA1C879c67bB7A877E4e19480f022"
 
 
-@router.get("/demo-order-bot", response_model=DemoOrderResponse)
-async def demo_order_bot_get(telegram_id: int = Query(...)):
+@router.get("/shops/demo-order-bot", response_model=DemoOrderResponse)
+async def demo_order_bot_get(telegram_id: Optional[int] = None):
     """
     Mock endpoint בשביל הבוט /demo_order.
-    לא נוגעים בבסיס נתונים, רק מחזירים הזמנה דמו קבועה.
+    לא נוגעים בבסיס נתונים, רק מחזירים הזמנת דמו קבועה.
     """
     return DemoOrderResponse(
         ok=True,
