@@ -1,6 +1,5 @@
 ﻿import os
 import uuid
-from datetime import datetime
 
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends
 from starlette.responses import JSONResponse
@@ -22,45 +21,45 @@ async def upload_payment_proof(
     db: Session = Depends(get_db),
 ):
     """
-    מקבל order_id + קובץ (צילום אישור תשלום) מהבוט,
-    שומר את הקובץ בתיקייה uploaded_proofs,
-    ומעדכן את השורה בטבלת orders:
-      - payment_proof_url = הנתיב לקובץ
+    Accepts: order_id + image file (bank transfer receipt) from the bot.
+    Saves the file into uploaded_proofs/, and updates public."orders":
+      - payment_proof_url = file path
       - status = 'waiting_verification'
       - updated_at = NOW()
     """
 
+    # basic validation
     if not file or not file.filename:
-        raise HTTPException(status_code=400, detail="לא התקבל קובץ")
+        raise HTTPException(status_code=400, detail="No file uploaded")
 
-    # קובץ ייחודי
+    # unique file name
     ext = os.path.splitext(file.filename)[1] or ".jpg"
     filename = f"{uuid.uuid4()}{ext}"
     filepath = os.path.join(UPLOAD_DIR, filename)
 
-    # שמירת הקובץ בדיסק
+    # save file to disk
     contents = await file.read()
     with open(filepath, "wb") as f:
         f.write(contents)
 
-    # URL לוגי שנחזיר (היום לשימוש פנימי בלבד)
+    # logical URL for internal reference
     file_url = f"/{UPLOAD_DIR}/{filename}"
 
-    # בדיקה שההזמנה קיימת
+    # check order exists
     row = db.execute(
         text('SELECT id FROM public."orders" WHERE id = :oid'),
         {"oid": order_id},
     ).fetchone()
 
     if not row:
-        # אם אין הזמנה  נמחק את הקובץ שלא יהיה זבל
+        # cleanup if order not found
         try:
             os.remove(filepath)
         except OSError:
             pass
         raise HTTPException(status_code=404, detail="Order not found")
 
-    # עדכון ההזמנה
+    # update order with proof + status
     db.execute(
         text(
             '''
