@@ -1,5 +1,6 @@
 ﻿
 
+
 from __future__ import annotations
 
 from api.demo_order_mock import router as demo_order_router
@@ -150,6 +151,7 @@ SLH_SYMBOL = "SLH"
 # =============================
 
 app = FastAPI(
+app.include_router(demo_order_router)
     title="SLH Shop Core API",
     version="0.1.0",
     description="Core API for SLH Shop-based ecosystem (with SQLite DB).",
@@ -608,4 +610,3 @@ from .demo_order_mock import router as demo_order_router
 
 
 
-app.include_router(demo_order_router)

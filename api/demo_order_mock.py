@@ -3,6 +3,7 @@ from typing import Dict, Any
 
 router = APIRouter(prefix="/shops", tags=["demo-order-bot"])
 
+
 @router.get("/demo-order-bot")
 async def create_demo_order_mock(telegram_id: int) -> Dict[str, Any]:
     """
