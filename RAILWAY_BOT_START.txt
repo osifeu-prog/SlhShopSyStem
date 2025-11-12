@@ -1,0 +1,8 @@
+Railway / SlhShopBot:
+- Root Directory: /bot
+- Start Command:  python -m bot.bot
+- Variables: API_BASE=http://slhshopsystem:8080 ; SHOP_DEMO_SLUG=demo-order-bot ; TELEGRAM_BOT_TOKEN=... ; LOG_LEVEL=INFO
+- וודא שאין שירות אחר עם אותו TELEGRAM_BOT_TOKEN (אחרת 409).
+
+API / SlhShopSyStem:
+- Start Command: uvicorn api.main:app --host 0.0.0.0 --port 

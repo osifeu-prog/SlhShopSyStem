@@ -1,5 +1,3 @@
-# Entry-point for: python -m bot.bot
-from .app import _run_polling
-import asyncio
+from .bot import main
 if __name__ == "__main__":
-    asyncio.run(_run_polling())
+    main()
